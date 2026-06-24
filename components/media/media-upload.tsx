@@ -64,19 +64,10 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
   }, [extensions, configMedia?.extensions]);
 
   const handleFiles = useCallback(async (files: File[]) => {
-    // 3 MB keeps base64 + JSON envelope under Vercel's 4.5 MB body limit
-    const DIRECT_UPLOAD_BYTES = 3 * 1024 * 1024;
     // 4 MB binary fits in multipart body (overhead < 1 KB); raise above 4 MB at your own risk
     const CHUNK_BYTES = 4 * 1024 * 1024;
     const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
     const CHUNK_CONCURRENCY = 4;
-
-    const readAsBase64 = (file: File) => new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve((reader.result as string).replace(/^(.+,)/, ""));
-      reader.onerror = () => reject(new Error("Failed to read file"));
-      reader.readAsDataURL(file);
-    });
 
     try {
       for (const file of files) {
@@ -90,17 +81,6 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
           if (file.size === 0) throw new Error("File is empty");
           if (file.size > MAX_TOTAL_BYTES) {
             throw new Error(`File too large. Max ${Math.floor(MAX_TOTAL_BYTES / 1024 / 1024)} MB.`);
-          }
-
-          if (file.size <= DIRECT_UPLOAD_BYTES) {
-            const content = await readAsBase64(file);
-            const response = await fetch(`/api/${config.owner}/${config.repo}/${encodeURIComponent(config.branch)}/files/${encodeURIComponent(fullPath)}`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ type: "media", name: configMedia.name, content }),
-            });
-            const data = await requireApiSuccess<any>(response, "Failed to upload file");
-            return data.data as FileSaveData;
           }
 
           const uploadId = crypto.randomUUID();
