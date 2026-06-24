@@ -1,7 +1,7 @@
 import { after } from "next/server";
 import { db } from "@/db";
 import { uploadChunkTable } from "@/db/schema";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, lt, or } from "drizzle-orm";
 import { requireApiUserSession } from "@/lib/session-server";
 import { createHttpError, toErrorResponse } from "@/lib/api-error";
 import { getToken } from "@/lib/token";
@@ -15,6 +15,7 @@ import { updateFileCache } from "@/lib/github-cache-file";
 const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
 const MAX_CHUNKS = 4;
 const MAX_INLINE_CHUNK_BYTES = 4 * 1024 * 1024;
+const STALE_CHUNK_AGE_MS = 10 * 60 * 1000;
 
 export async function POST(request: Request) {
   try {
@@ -163,9 +164,12 @@ export async function POST(request: Request) {
 
     after(async () => {
       try {
-        await db.delete(uploadChunkTable).where(and(
-          eq(uploadChunkTable.uploadId, uploadId),
-          eq(uploadChunkTable.userId, user.id),
+        await db.delete(uploadChunkTable).where(or(
+          and(
+            eq(uploadChunkTable.uploadId, uploadId),
+            eq(uploadChunkTable.userId, user.id),
+          ),
+          lt(uploadChunkTable.createdAt, new Date(Date.now() - STALE_CHUNK_AGE_MS)),
         ));
       } catch (error) {
         console.error("Chunk cleanup after finalize failed", error);

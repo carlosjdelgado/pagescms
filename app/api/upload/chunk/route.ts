@@ -1,12 +1,10 @@
-import { after } from "next/server";
 import { db } from "@/db";
 import { uploadChunkTable } from "@/db/schema";
-import { eq, lt } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { requireApiUserSession } from "@/lib/session-server";
 import { createHttpError, toErrorResponse } from "@/lib/api-error";
 
 const MAX_CHUNK_BYTES = 4 * 1024 * 1024;
-const STALE_CHUNK_AGE_MS = 60 * 60 * 1000;
 
 export async function POST(request: Request) {
   try {
@@ -44,16 +42,6 @@ export async function POST(request: Request) {
       target: [uploadChunkTable.uploadId, uploadChunkTable.chunkIdx],
       set: { data: buffer, createdAt: new Date() },
       setWhere: eq(uploadChunkTable.userId, user.id),
-    });
-
-    after(async () => {
-      try {
-        await db.delete(uploadChunkTable).where(
-          lt(uploadChunkTable.createdAt, new Date(Date.now() - STALE_CHUNK_AGE_MS)),
-        );
-      } catch (error) {
-        console.error("Stale chunk cleanup failed", error);
-      }
     });
 
     return Response.json({ status: "success" });
