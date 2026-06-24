@@ -14,6 +14,7 @@ import { updateFileCache } from "@/lib/github-cache-file";
 
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 const MAX_CHUNKS = 50;
+const MAX_INLINE_LAST_CHUNK_BYTES = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
@@ -21,23 +22,32 @@ export async function POST(request: Request) {
     if ("response" in sessionResult) return sessionResult.response;
     const user = sessionResult.user;
 
-    const data: any = await request.json();
-    const uploadId = typeof data.uploadId === "string" ? data.uploadId : "";
-    const totalChunks = Number.isInteger(data.totalChunks) ? data.totalChunks : -1;
-    const owner = typeof data.owner === "string" ? data.owner : "";
-    const repo = typeof data.repo === "string" ? data.repo : "";
-    const branch = typeof data.branch === "string" ? data.branch : "";
-    const path = typeof data.path === "string" ? data.path : "";
-    const name = typeof data.name === "string" ? data.name : "";
-    const sha = typeof data.sha === "string" ? data.sha : undefined;
-    const onConflict = data.onConflict === "error" ? "error" : "rename";
+    const form = await request.formData();
+    const uploadId = typeof form.get("uploadId") === "string" ? form.get("uploadId") as string : "";
+    const totalChunksRaw = form.get("totalChunks");
+    const totalChunks = typeof totalChunksRaw === "string" ? parseInt(totalChunksRaw, 10) : NaN;
+    const owner = typeof form.get("owner") === "string" ? form.get("owner") as string : "";
+    const repo = typeof form.get("repo") === "string" ? form.get("repo") as string : "";
+    const branch = typeof form.get("branch") === "string" ? form.get("branch") as string : "";
+    const path = typeof form.get("path") === "string" ? form.get("path") as string : "";
+    const name = typeof form.get("name") === "string" ? form.get("name") as string : "";
+    const shaRaw = form.get("sha");
+    const sha = typeof shaRaw === "string" && shaRaw.length > 0 ? shaRaw : undefined;
+    const onConflict = form.get("onConflict") === "error" ? "error" : "rename";
+    const lastChunk = form.get("lastChunk");
 
     if (!uploadId || uploadId.length > 64) throw createHttpError(`Invalid "uploadId".`, 400);
-    if (totalChunks < 1 || totalChunks > MAX_CHUNKS) {
+    if (!Number.isInteger(totalChunks) || totalChunks < 1 || totalChunks > MAX_CHUNKS) {
       throw createHttpError(`"totalChunks" must be between 1 and ${MAX_CHUNKS}.`, 400);
     }
     if (!owner || !repo || !branch || !path || !name) {
       throw createHttpError(`Missing required fields.`, 400);
+    }
+    if (!(lastChunk instanceof Blob) || lastChunk.size === 0) {
+      throw createHttpError(`Missing "lastChunk".`, 400);
+    }
+    if (lastChunk.size > MAX_INLINE_LAST_CHUNK_BYTES) {
+      throw createHttpError(`"lastChunk" too large.`, 413);
     }
 
     const { token } = await getToken(user, owner, repo, true);
@@ -63,28 +73,34 @@ export async function POST(request: Request) {
       throw createHttpError(`Use the files endpoint to create empty folders.`, 400);
     }
 
-    const chunks = await db
-      .select({ chunkIdx: uploadChunkTable.chunkIdx, data: uploadChunkTable.data })
-      .from(uploadChunkTable)
-      .where(and(
-        eq(uploadChunkTable.uploadId, uploadId),
-        eq(uploadChunkTable.userId, user.id),
-      ))
-      .orderBy(asc(uploadChunkTable.chunkIdx));
+    const expectedFromDb = totalChunks - 1;
+    const chunksFromDb = expectedFromDb > 0
+      ? await db
+          .select({ chunkIdx: uploadChunkTable.chunkIdx, data: uploadChunkTable.data })
+          .from(uploadChunkTable)
+          .where(and(
+            eq(uploadChunkTable.uploadId, uploadId),
+            eq(uploadChunkTable.userId, user.id),
+          ))
+          .orderBy(asc(uploadChunkTable.chunkIdx))
+      : [];
 
-    if (chunks.length !== totalChunks) {
+    if (chunksFromDb.length !== expectedFromDb) {
       throw createHttpError(
-        `Expected ${totalChunks} chunks but found ${chunks.length}.`,
+        `Expected ${expectedFromDb} staged chunks but found ${chunksFromDb.length}.`,
         400,
       );
     }
-    for (let i = 0; i < chunks.length; i++) {
-      if (chunks[i].chunkIdx !== i) {
+    for (let i = 0; i < chunksFromDb.length; i++) {
+      if (chunksFromDb[i].chunkIdx !== i) {
         throw createHttpError(`Missing chunk at index ${i}.`, 400);
       }
     }
 
-    const buffers = chunks.map(c => Buffer.from(c.data, "base64"));
+    const buffers = [
+      ...chunksFromDb.map(c => Buffer.from(c.data, "base64")),
+      Buffer.from(await lastChunk.arrayBuffer()),
+    ];
     const totalSize = buffers.reduce((acc, b) => acc + b.length, 0);
     if (totalSize > MAX_TOTAL_BYTES) {
       throw createHttpError(

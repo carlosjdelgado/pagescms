@@ -104,6 +104,7 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
 
           const uploadId = crypto.randomUUID();
           const totalChunks = Math.ceil(file.size / CHUNK_BYTES);
+          const stagedChunks = totalChunks - 1; // ponytail: last chunk rides inline in finalize
 
           const uploadChunk = async (idx: number) => {
             const start = idx * CHUNK_BYTES;
@@ -118,26 +119,29 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
           };
 
           // ponytail: batched parallelism (4); switch to rolling pool if uneven chunk times matter
-          for (let i = 0; i < totalChunks; i += CHUNK_CONCURRENCY) {
+          for (let i = 0; i < stagedChunks; i += CHUNK_CONCURRENCY) {
             const batch = [];
-            for (let j = i; j < Math.min(i + CHUNK_CONCURRENCY, totalChunks); j++) {
+            for (let j = i; j < Math.min(i + CHUNK_CONCURRENCY, stagedChunks); j++) {
               batch.push(uploadChunk(j));
             }
             await Promise.all(batch);
           }
 
+          const lastStart = (totalChunks - 1) * CHUNK_BYTES;
+          const lastBlob = file.slice(lastStart, file.size);
+          const finalizeForm = new FormData();
+          finalizeForm.set("uploadId", uploadId);
+          finalizeForm.set("totalChunks", String(totalChunks));
+          finalizeForm.set("owner", config.owner);
+          finalizeForm.set("repo", config.repo);
+          finalizeForm.set("branch", config.branch);
+          finalizeForm.set("path", fullPath);
+          finalizeForm.set("name", configMedia.name);
+          finalizeForm.set("lastChunk", lastBlob);
+
           const finalizeResponse = await fetch("/api/upload/finalize", {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              uploadId,
-              totalChunks,
-              owner: config.owner,
-              repo: config.repo,
-              branch: config.branch,
-              path: fullPath,
-              name: configMedia.name,
-            }),
+            body: finalizeForm,
           });
 
           const data = await requireApiSuccess<any>(finalizeResponse, "Failed to upload file");
