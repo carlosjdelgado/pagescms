@@ -3,7 +3,7 @@ CREATE TABLE "upload_chunk" (
 	"upload_id" text NOT NULL,
 	"user_id" text NOT NULL,
 	"chunk_idx" integer NOT NULL,
-	"data" text NOT NULL,
+	"data" bytea NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
