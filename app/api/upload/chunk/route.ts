@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { db } from "@/db";
 import { uploadChunkTable } from "@/db/schema";
 import { eq, lt } from "drizzle-orm";
@@ -46,10 +47,16 @@ export async function POST(request: Request) {
       setWhere: eq(uploadChunkTable.userId, user.id),
     });
 
-    // ponytail: oportunistic stale-chunk cleanup; cron-free housekeeping for Hobby plan
-    await db.delete(uploadChunkTable).where(
-      lt(uploadChunkTable.createdAt, new Date(Date.now() - STALE_CHUNK_AGE_MS)),
-    );
+    // ponytail: oportunistic stale-chunk cleanup runs after the response; cron-free housekeeping for Hobby
+    after(async () => {
+      try {
+        await db.delete(uploadChunkTable).where(
+          lt(uploadChunkTable.createdAt, new Date(Date.now() - STALE_CHUNK_AGE_MS)),
+        );
+      } catch (error) {
+        console.error("Stale chunk cleanup failed", error);
+      }
+    });
 
     return Response.json({ status: "success" });
   } catch (error: any) {

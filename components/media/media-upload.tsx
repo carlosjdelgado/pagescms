@@ -66,6 +66,7 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
   const handleFiles = useCallback(async (files: File[]) => {
     const CHUNK_BYTES = 3 * 1024 * 1024;
     const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
+    const CHUNK_CONCURRENCY = 4;
 
     try {
       for (const file of files) {
@@ -83,7 +84,7 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
           const uploadId = crypto.randomUUID();
           const totalChunks = Math.ceil(file.size / CHUNK_BYTES);
 
-          for (let idx = 0; idx < totalChunks; idx++) {
+          const uploadChunk = async (idx: number) => {
             const start = idx * CHUNK_BYTES;
             const end = Math.min(start + CHUNK_BYTES, file.size);
             const blob = file.slice(start, end);
@@ -93,6 +94,15 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
             form.set("chunk", blob);
             const chunkResponse = await fetch("/api/upload/chunk", { method: "POST", body: form });
             await requireApiSuccess(chunkResponse, `Failed to upload chunk ${idx + 1}/${totalChunks}`);
+          };
+
+          // ponytail: batched parallelism (4); switch to rolling pool if uneven chunk times matter
+          for (let i = 0; i < totalChunks; i += CHUNK_CONCURRENCY) {
+            const batch = [];
+            for (let j = i; j < Math.min(i + CHUNK_CONCURRENCY, totalChunks); j++) {
+              batch.push(uploadChunk(j));
+            }
+            await Promise.all(batch);
           }
 
           const fullPath = joinPathSegments([path ?? "", uploadFilename]);

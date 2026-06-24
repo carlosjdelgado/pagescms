@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { db } from "@/db";
 import { uploadChunkTable } from "@/db/schema";
 import { and, asc, eq } from "drizzle-orm";
@@ -144,10 +145,17 @@ export async function POST(request: Request) {
       );
     }
 
-    await db.delete(uploadChunkTable).where(and(
-      eq(uploadChunkTable.uploadId, uploadId),
-      eq(uploadChunkTable.userId, user.id),
-    ));
+    // ponytail: chunks already pushed to GitHub; delete in background, TTL sweep catches any miss
+    after(async () => {
+      try {
+        await db.delete(uploadChunkTable).where(and(
+          eq(uploadChunkTable.uploadId, uploadId),
+          eq(uploadChunkTable.userId, user.id),
+        ));
+      } catch (error) {
+        console.error("Chunk cleanup after finalize failed", error);
+      }
+    });
 
     return Response.json({
       status: "success",
