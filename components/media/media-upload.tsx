@@ -64,6 +64,9 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
   }, [extensions, configMedia?.extensions]);
 
   const handleFiles = useCallback(async (files: File[]) => {
+    const CHUNK_BYTES = 3 * 1024 * 1024;
+    const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
+
     try {
       for (const file of files) {
         const uploadFilename = getUploadFileName(
@@ -72,32 +75,42 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
         );
 
         const uploadPromise = (async () => {
-          const content = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => {
-              const base64Content = (reader.result as string).replace(/^(.+,)/, "");
-              resolve(base64Content);
-            };
-            reader.onerror = () => reject(new Error("Failed to read file"));
-            reader.readAsDataURL(file);
-          });
+          if (file.size === 0) throw new Error("File is empty");
+          if (file.size > MAX_TOTAL_BYTES) {
+            throw new Error(`File too large. Max ${Math.floor(MAX_TOTAL_BYTES / 1024 / 1024)} MB.`);
+          }
+
+          const uploadId = crypto.randomUUID();
+          const totalChunks = Math.ceil(file.size / CHUNK_BYTES);
+
+          for (let idx = 0; idx < totalChunks; idx++) {
+            const start = idx * CHUNK_BYTES;
+            const end = Math.min(start + CHUNK_BYTES, file.size);
+            const blob = file.slice(start, end);
+            const form = new FormData();
+            form.set("uploadId", uploadId);
+            form.set("idx", String(idx));
+            form.set("chunk", blob);
+            const chunkResponse = await fetch("/api/upload/chunk", { method: "POST", body: form });
+            await requireApiSuccess(chunkResponse, `Failed to upload chunk ${idx + 1}/${totalChunks}`);
+          }
 
           const fullPath = joinPathSegments([path ?? "", uploadFilename]);
-          const response = await fetch(`/api/${config.owner}/${config.repo}/${encodeURIComponent(config.branch)}/files/${encodeURIComponent(fullPath)}`, {
+          const finalizeResponse = await fetch("/api/upload/finalize", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              type: "media",
+              uploadId,
+              totalChunks,
+              owner: config.owner,
+              repo: config.repo,
+              branch: config.branch,
+              path: fullPath,
               name: configMedia.name,
-              content,
             }),
           });
 
-          const data = await requireApiSuccess<any>(
-            response,
-            "Failed to upload file",
-          );
-
+          const data = await requireApiSuccess<any>(finalizeResponse, "Failed to upload file");
           return data.data as FileSaveData;
         })();
 
