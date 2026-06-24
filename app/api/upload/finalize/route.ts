@@ -98,7 +98,7 @@ export async function POST(request: Request) {
     }
 
     const buffers = [
-      ...chunksFromDb.map(c => Buffer.from(c.data, "base64")),
+      ...chunksFromDb.map(c => c.data),
       Buffer.from(await lastChunk.arrayBuffer()),
     ];
     const totalSize = buffers.reduce((acc, b) => acc + b.length, 0);

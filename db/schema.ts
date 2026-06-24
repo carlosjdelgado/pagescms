@@ -9,8 +9,15 @@ import {
   index,
   uniqueIndex,
   jsonb,
+  customType,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
+
+const bytea = customType<{ data: Buffer; driverData: Buffer; notNull: true; default: false }>({
+  dataType() {
+    return "bytea";
+  },
+});
 
 const userTable = pgTable("user", {
   id: text("id").notNull().primaryKey(),
@@ -214,7 +221,7 @@ const uploadChunkTable = pgTable("upload_chunk", {
   uploadId: text("upload_id").notNull(),
   userId: text("user_id").notNull().references(() => userTable.id, { onDelete: "cascade" }),
   chunkIdx: integer("chunk_idx").notNull(),
-  data: text("data").notNull(),
+  data: bytea("data").notNull(),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (table) => [
   uniqueIndex("uq_upload_chunk_uploadId_chunkIdx").on(table.uploadId, table.chunkIdx),

@@ -34,16 +34,15 @@ export async function POST(request: Request) {
     }
 
     const buffer = Buffer.from(await chunk.arrayBuffer());
-    const base64 = buffer.toString("base64");
 
     await db.insert(uploadChunkTable).values({
       uploadId,
       userId: user.id,
       chunkIdx: idx,
-      data: base64,
+      data: buffer,
     }).onConflictDoUpdate({
       target: [uploadChunkTable.uploadId, uploadChunkTable.chunkIdx],
-      set: { data: base64, createdAt: new Date() },
+      set: { data: buffer, createdAt: new Date() },
       setWhere: eq(uploadChunkTable.userId, user.id),
     });
 
