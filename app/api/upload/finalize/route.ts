@@ -161,7 +161,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // ponytail: chunks already pushed to GitHub; delete in background, TTL sweep catches any miss
     after(async () => {
       try {
         await db.delete(uploadChunkTable).where(and(

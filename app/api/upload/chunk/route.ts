@@ -46,7 +46,6 @@ export async function POST(request: Request) {
       setWhere: eq(uploadChunkTable.userId, user.id),
     });
 
-    // ponytail: oportunistic stale-chunk cleanup runs after the response; cron-free housekeeping for Hobby
     after(async () => {
       try {
         await db.delete(uploadChunkTable).where(

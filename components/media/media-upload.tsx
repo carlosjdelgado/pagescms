@@ -64,9 +64,9 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
   }, [extensions, configMedia?.extensions]);
 
   const handleFiles = useCallback(async (files: File[]) => {
-    // ponytail: 3 MB keeps base64 + JSON envelope under Vercel's 4.5 MB body limit
+    // 3 MB keeps base64 + JSON envelope under Vercel's 4.5 MB body limit
     const DIRECT_UPLOAD_BYTES = 3 * 1024 * 1024;
-    // ponytail: 4 MB binary fits in multipart body (overhead < 1 KB); raise above 4 MB at your own risk
+    // 4 MB binary fits in multipart body (overhead < 1 KB); raise above 4 MB at your own risk
     const CHUNK_BYTES = 4 * 1024 * 1024;
     const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
     const CHUNK_CONCURRENCY = 4;
@@ -105,7 +105,7 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
 
           const uploadId = crypto.randomUUID();
           const totalChunks = Math.ceil(file.size / CHUNK_BYTES);
-          // ponytail: chunk 0 is always CHUNK_BYTES (or the whole file if N=1); riding it inline maximizes savings on non-multiple sizes
+          // chunk 0 is always CHUNK_BYTES (or the whole file if N=1); riding it inline maximizes savings on non-multiple sizes
 
           const uploadChunk = async (idx: number) => {
             const start = idx * CHUNK_BYTES;
@@ -119,7 +119,7 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
             await requireApiSuccess(chunkResponse, `Failed to upload chunk ${idx + 1}/${totalChunks}`);
           };
 
-          // ponytail: batched parallelism (4); switch to rolling pool if uneven chunk times matter
+          // batched parallelism (4); switch to rolling pool if uneven chunk times matter
           for (let i = 1; i < totalChunks; i += CHUNK_CONCURRENCY) {
             const batch = [];
             for (let j = i; j < Math.min(i + CHUNK_CONCURRENCY, totalChunks); j++) {
