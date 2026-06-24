@@ -68,7 +68,7 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
     const DIRECT_UPLOAD_BYTES = 3 * 1024 * 1024;
     // ponytail: 4 MB binary fits in multipart body (overhead < 1 KB); raise above 4 MB at your own risk
     const CHUNK_BYTES = 4 * 1024 * 1024;
-    const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
+    const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
     const CHUNK_CONCURRENCY = 4;
 
     const readAsBase64 = (file: File) => new Promise<string>((resolve, reject) => {

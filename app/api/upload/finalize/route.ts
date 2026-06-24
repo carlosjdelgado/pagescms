@@ -12,8 +12,8 @@ import { resolveCommitIdentity } from "@/lib/commit-message";
 import { githubSaveFile } from "@/lib/utils/github-save-file";
 import { updateFileCache } from "@/lib/github-cache-file";
 
-const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
-const MAX_CHUNKS = 50;
+const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
+const MAX_CHUNKS = 4;
 const MAX_INLINE_CHUNK_BYTES = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
