@@ -66,7 +66,8 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
   const handleFiles = useCallback(async (files: File[]) => {
     // ponytail: 3 MB keeps base64 + JSON envelope under Vercel's 4.5 MB body limit
     const DIRECT_UPLOAD_BYTES = 3 * 1024 * 1024;
-    const CHUNK_BYTES = 3 * 1024 * 1024;
+    // ponytail: 4 MB binary fits in multipart body (overhead < 1 KB); raise above 4 MB at your own risk
+    const CHUNK_BYTES = 4 * 1024 * 1024;
     const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
     const CHUNK_CONCURRENCY = 4;
 
