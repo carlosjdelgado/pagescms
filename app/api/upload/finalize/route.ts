@@ -14,7 +14,7 @@ import { updateFileCache } from "@/lib/github-cache-file";
 
 const MAX_TOTAL_BYTES = 50 * 1024 * 1024;
 const MAX_CHUNKS = 50;
-const MAX_INLINE_LAST_CHUNK_BYTES = 4 * 1024 * 1024;
+const MAX_INLINE_CHUNK_BYTES = 4 * 1024 * 1024;
 
 export async function POST(request: Request) {
   try {
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
     const shaRaw = form.get("sha");
     const sha = typeof shaRaw === "string" && shaRaw.length > 0 ? shaRaw : undefined;
     const onConflict = form.get("onConflict") === "error" ? "error" : "rename";
-    const lastChunk = form.get("lastChunk");
+    const firstChunk = form.get("firstChunk");
 
     if (!uploadId || uploadId.length > 64) throw createHttpError(`Invalid "uploadId".`, 400);
     if (!Number.isInteger(totalChunks) || totalChunks < 1 || totalChunks > MAX_CHUNKS) {
@@ -43,11 +43,11 @@ export async function POST(request: Request) {
     if (!owner || !repo || !branch || !path || !name) {
       throw createHttpError(`Missing required fields.`, 400);
     }
-    if (!(lastChunk instanceof Blob) || lastChunk.size === 0) {
-      throw createHttpError(`Missing "lastChunk".`, 400);
+    if (!(firstChunk instanceof Blob) || firstChunk.size === 0) {
+      throw createHttpError(`Missing "firstChunk".`, 400);
     }
-    if (lastChunk.size > MAX_INLINE_LAST_CHUNK_BYTES) {
-      throw createHttpError(`"lastChunk" too large.`, 413);
+    if (firstChunk.size > MAX_INLINE_CHUNK_BYTES) {
+      throw createHttpError(`"firstChunk" too large.`, 413);
     }
 
     const { token } = await getToken(user, owner, repo, true);
@@ -92,14 +92,14 @@ export async function POST(request: Request) {
       );
     }
     for (let i = 0; i < chunksFromDb.length; i++) {
-      if (chunksFromDb[i].chunkIdx !== i) {
-        throw createHttpError(`Missing chunk at index ${i}.`, 400);
+      if (chunksFromDb[i].chunkIdx !== i + 1) {
+        throw createHttpError(`Missing chunk at index ${i + 1}.`, 400);
       }
     }
 
     const buffers = [
+      Buffer.from(await firstChunk.arrayBuffer()),
       ...chunksFromDb.map(c => c.data),
-      Buffer.from(await lastChunk.arrayBuffer()),
     ];
     const totalSize = buffers.reduce((acc, b) => acc + b.length, 0);
     if (totalSize > MAX_TOTAL_BYTES) {

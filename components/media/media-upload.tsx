@@ -105,7 +105,7 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
 
           const uploadId = crypto.randomUUID();
           const totalChunks = Math.ceil(file.size / CHUNK_BYTES);
-          const stagedChunks = totalChunks - 1; // ponytail: last chunk rides inline in finalize
+          // ponytail: chunk 0 is always CHUNK_BYTES (or the whole file if N=1); riding it inline maximizes savings on non-multiple sizes
 
           const uploadChunk = async (idx: number) => {
             const start = idx * CHUNK_BYTES;
@@ -120,16 +120,15 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
           };
 
           // ponytail: batched parallelism (4); switch to rolling pool if uneven chunk times matter
-          for (let i = 0; i < stagedChunks; i += CHUNK_CONCURRENCY) {
+          for (let i = 1; i < totalChunks; i += CHUNK_CONCURRENCY) {
             const batch = [];
-            for (let j = i; j < Math.min(i + CHUNK_CONCURRENCY, stagedChunks); j++) {
+            for (let j = i; j < Math.min(i + CHUNK_CONCURRENCY, totalChunks); j++) {
               batch.push(uploadChunk(j));
             }
             await Promise.all(batch);
           }
 
-          const lastStart = (totalChunks - 1) * CHUNK_BYTES;
-          const lastBlob = file.slice(lastStart, file.size);
+          const firstBlob = file.slice(0, Math.min(CHUNK_BYTES, file.size));
           const finalizeForm = new FormData();
           finalizeForm.set("uploadId", uploadId);
           finalizeForm.set("totalChunks", String(totalChunks));
@@ -138,7 +137,7 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
           finalizeForm.set("branch", config.branch);
           finalizeForm.set("path", fullPath);
           finalizeForm.set("name", configMedia.name);
-          finalizeForm.set("lastChunk", lastBlob);
+          finalizeForm.set("firstChunk", firstBlob);
 
           const finalizeResponse = await fetch("/api/upload/finalize", {
             method: "POST",
