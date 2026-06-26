@@ -124,7 +124,7 @@ export async function POST(
       throw createHttpError(`"totalChunks" must be a positive integer.`, 400);
     }
     if (!name) throw createHttpError(`Missing "name".`, 400);
-    if (!(firstChunk instanceof Blob) || firstChunk.size === 0) {
+    if (!(firstChunk instanceof Blob)) {
       throw createHttpError(`Missing "firstChunk".`, 400);
     }
     if (firstChunk.size > CHUNK_BYTES) {
@@ -135,6 +135,11 @@ export async function POST(
     if (!token) throw new Error("Token not found");
 
     const normalizedPath = normalizePath(path);
+    const isFolderMarker = getFileName(normalizedPath) === ".gitkeep";
+
+    if (firstChunk.size === 0 && !isFolderMarker) {
+      throw createHttpError(`Empty "firstChunk" only allowed for .gitkeep folder markers.`, 400);
+    }
 
     const config = await getConfig(owner, repo, branch, { getToken: async () => token });
     if (!config) throw new Error(`Configuration not found for ${owner}/${repo}/${branch}.`);
@@ -145,13 +150,11 @@ export async function POST(
       throw new Error(`Invalid path "${path}" for media "${name}".`);
     }
     if (
+      !isFolderMarker &&
       schema.extensions?.length > 0 &&
       !schema.extensions.includes(getFileExtension(normalizedPath))
     ) {
       throw new Error(`Invalid extension "${getFileExtension(normalizedPath)}" for media.`);
-    }
-    if (getFileName(normalizedPath) === ".gitkeep") {
-      throw createHttpError(`Use the files endpoint to create empty folders.`, 400);
     }
 
     const expectedFromDb = totalChunks - 1;

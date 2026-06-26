@@ -14,16 +14,16 @@ export async function uploadMediaChunked(opts: {
   branch: string;
   mediaName: string;
   targetPath: string;
+  onConflict?: "error" | "rename";
 }): Promise<FileSaveData> {
-  const { file, owner, repo, branch, mediaName, targetPath } = opts;
+  const { file, owner, repo, branch, mediaName, targetPath, onConflict } = opts;
 
-  if (file.size === 0) throw new Error("File is empty");
   if (file.size > MAX_TOTAL_BYTES) {
     throw new Error(`File too large. Max ${Math.floor(MAX_TOTAL_BYTES / 1024 / 1024)} MB.`);
   }
 
   const uploadId = crypto.randomUUID();
-  const totalChunks = Math.ceil(file.size / CHUNK_BYTES);
+  const totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_BYTES));
   const baseUrl = `/api/${owner}/${repo}/${encodeURIComponent(branch)}/media/${encodeURIComponent(mediaName)}/${encodeURIComponent(targetPath)}`;
 
   const uploadChunk = async (idx: number) => {
@@ -52,6 +52,7 @@ export async function uploadMediaChunked(opts: {
   finalizeForm.set("uploadId", uploadId);
   finalizeForm.set("totalChunks", String(totalChunks));
   finalizeForm.set("firstChunk", firstBlob);
+  if (onConflict) finalizeForm.set("onConflict", onConflict);
 
   const response = await fetch(baseUrl, { method: "POST", body: finalizeForm });
   const data = await requireApiSuccess<any>(response, "Failed to upload file");

@@ -161,21 +161,6 @@ export async function POST(
           }
         }
         break;
-      case "media":
-        if (!data.name) throw new Error(`"name" is required for media.`);
-        if (getFileName(normalizedPath) !== ".gitkeep") {
-          throw new Error(`Media uploads must use POST /api/.../media/[name]/[path].`);
-        }
-
-        schema = getSchemaByName(config?.object, data.name, "media");
-        if (!schema) throw new Error(`Media schema not found for ${data.name}.`);
-        schemaCommitTemplates = schema?.commit?.templates;
-        schemaCommitIdentity = schema?.commit?.identity;
-
-        if (!normalizedPath.startsWith(schema.input)) throw new Error(`Invalid path "${params.path}" for media "${data.name}".`);
-
-        contentBase64 = "";
-        break;
       case "settings":
         assertGithubIdentity(user, "Only GitHub users can manage settings.");
         if (normalizedPath !== ".pages.yml") throw new Error(`Invalid path "${params.path}" for settings.`);
