@@ -12,10 +12,8 @@ import { getConfig } from "@/lib/config-store";
 import { getSchemaByName } from "@/lib/schema";
 import { resolveCommitIdentity } from "@/lib/commit-message";
 import { githubSaveFile } from "@/lib/utils/github-save-file";
+import { CHUNK_BYTES, MAX_TOTAL_BYTES } from "@/lib/utils/upload-media";
 
-const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
-const MAX_CHUNKS = 4;
-const MAX_INLINE_CHUNK_BYTES = 4 * 1024 * 1024;
 const STALE_CHUNK_AGE_MS = 10 * 60 * 1000;
 
 /**
@@ -122,14 +120,14 @@ export async function POST(
     const firstChunk = form.get("firstChunk");
 
     if (!uploadId || uploadId.length > 64) throw createHttpError(`Invalid "uploadId".`, 400);
-    if (!Number.isInteger(totalChunks) || totalChunks < 1 || totalChunks > MAX_CHUNKS) {
-      throw createHttpError(`"totalChunks" must be between 1 and ${MAX_CHUNKS}.`, 400);
+    if (!Number.isInteger(totalChunks) || totalChunks < 1) {
+      throw createHttpError(`"totalChunks" must be a positive integer.`, 400);
     }
     if (!name) throw createHttpError(`Missing "name".`, 400);
     if (!(firstChunk instanceof Blob) || firstChunk.size === 0) {
       throw createHttpError(`Missing "firstChunk".`, 400);
     }
-    if (firstChunk.size > MAX_INLINE_CHUNK_BYTES) {
+    if (firstChunk.size > CHUNK_BYTES) {
       throw createHttpError(`"firstChunk" too large.`, 413);
     }
 

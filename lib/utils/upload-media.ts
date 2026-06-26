@@ -2,11 +2,10 @@ import { requireApiSuccess } from "@/lib/api-client";
 import type { FileSaveData } from "@/types/api";
 
 // 4 MB binary fits in multipart body (overhead < 1 KB); raise above 4 MB at your own risk
-const CHUNK_BYTES = 4 * 1024 * 1024;
-const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
-const CHUNK_CONCURRENCY = 4;
+export const CHUNK_BYTES = 4 * 1024 * 1024;
+export const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
 
-export const MAX_MEDIA_UPLOAD_BYTES = MAX_TOTAL_BYTES;
+const CHUNK_CONCURRENCY = 4;
 
 export async function uploadMediaChunked(opts: {
   file: File;

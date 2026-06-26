@@ -3,8 +3,10 @@ import { uploadChunkTable } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { requireApiUserSession } from "@/lib/session-server";
 import { createHttpError, toErrorResponse } from "@/lib/api-error";
+import { CHUNK_BYTES, MAX_TOTAL_BYTES } from "@/lib/utils/upload-media";
 
-const MAX_CHUNK_BYTES = 4 * 1024 * 1024;
+// chunk 0 rides inline in finalize, chunks 1..MAX_CHUNK_IDX go here
+const MAX_CHUNK_IDX = Math.ceil(MAX_TOTAL_BYTES / CHUNK_BYTES) - 1;
 
 export async function POST(request: Request) {
   try {
@@ -21,14 +23,14 @@ export async function POST(request: Request) {
       throw createHttpError(`Invalid "uploadId".`, 400);
     }
     const idx = typeof idxRaw === "string" ? parseInt(idxRaw, 10) : NaN;
-    if (!Number.isInteger(idx) || idx < 0 || idx > 9999) {
-      throw createHttpError(`Invalid "idx".`, 400);
+    if (!Number.isInteger(idx) || idx < 1 || idx > MAX_CHUNK_IDX) {
+      throw createHttpError(`"idx" must be between 1 and ${MAX_CHUNK_IDX}.`, 400);
     }
     if (!(chunk instanceof Blob)) {
       throw createHttpError(`Invalid "chunk".`, 400);
     }
-    if (chunk.size === 0 || chunk.size > MAX_CHUNK_BYTES) {
-      throw createHttpError(`Chunk size must be between 1 and ${MAX_CHUNK_BYTES} bytes.`, 413);
+    if (chunk.size === 0 || chunk.size > CHUNK_BYTES) {
+      throw createHttpError(`Chunk size must be between 1 and ${CHUNK_BYTES} bytes.`, 413);
     }
 
     const buffer = Buffer.from(await chunk.arrayBuffer());
