@@ -6,7 +6,7 @@ import { getUploadFileName, joinPathSegments } from "@/lib/utils/file";
 import { toast } from "sonner";
 import { getSchemaByName } from "@/lib/schema";
 import { cn } from "@/lib/utils";
-import { requireApiSuccess } from "@/lib/api-client";
+import { uploadMediaChunked } from "@/lib/utils/upload-media";
 import type { FileSaveData } from "@/types/api";
 
 interface MediaUploadContextValue {
@@ -64,11 +64,6 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
   }, [extensions, configMedia?.extensions]);
 
   const handleFiles = useCallback(async (files: File[]) => {
-    // 4 MB binary fits in multipart body (overhead < 1 KB); raise above 4 MB at your own risk
-    const CHUNK_BYTES = 4 * 1024 * 1024;
-    const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
-    const CHUNK_CONCURRENCY = 4;
-
     try {
       for (const file of files) {
         const uploadFilename = getUploadFileName(
@@ -77,56 +72,18 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
         );
         const fullPath = joinPathSegments([path ?? "", uploadFilename]);
 
-        const uploadPromise = (async () => {
-          if (file.size === 0) throw new Error("File is empty");
-          if (file.size > MAX_TOTAL_BYTES) {
-            throw new Error(`File too large. Max ${Math.floor(MAX_TOTAL_BYTES / 1024 / 1024)} MB.`);
-          }
-
-          const uploadId = crypto.randomUUID();
-          const totalChunks = Math.ceil(file.size / CHUNK_BYTES);
-          const baseUrl = `/api/${config.owner}/${config.repo}/${encodeURIComponent(config.branch)}/media/${encodeURIComponent(configMedia.name)}/${encodeURIComponent(fullPath)}`;
-          // chunk 0 is always CHUNK_BYTES (or the whole file if N=1); riding it inline maximizes savings on non-multiple sizes
-
-          const uploadChunk = async (idx: number) => {
-            const start = idx * CHUNK_BYTES;
-            const end = Math.min(start + CHUNK_BYTES, file.size);
-            const blob = file.slice(start, end);
-            const form = new FormData();
-            form.set("uploadId", uploadId);
-            form.set("idx", String(idx));
-            form.set("chunk", blob);
-            const chunkResponse = await fetch(`${baseUrl}/chunk`, { method: "POST", body: form });
-            await requireApiSuccess(chunkResponse, `Failed to upload chunk ${idx + 1}/${totalChunks}`);
-          };
-
-          // batched parallelism (4); switch to rolling pool if uneven chunk times matter
-          for (let i = 1; i < totalChunks; i += CHUNK_CONCURRENCY) {
-            const batch = [];
-            for (let j = i; j < Math.min(i + CHUNK_CONCURRENCY, totalChunks); j++) {
-              batch.push(uploadChunk(j));
-            }
-            await Promise.all(batch);
-          }
-
-          const firstBlob = file.slice(0, Math.min(CHUNK_BYTES, file.size));
-          const finalizeForm = new FormData();
-          finalizeForm.set("uploadId", uploadId);
-          finalizeForm.set("totalChunks", String(totalChunks));
-          finalizeForm.set("firstChunk", firstBlob);
-
-          const finalizeResponse = await fetch(baseUrl, {
-            method: "POST",
-            body: finalizeForm,
-          });
-
-          const data = await requireApiSuccess<any>(finalizeResponse, "Failed to upload file");
-          return data.data as FileSaveData;
-        })();
+        const uploadPromise = uploadMediaChunked({
+          file,
+          owner: config.owner,
+          repo: config.repo,
+          branch: config.branch,
+          mediaName: configMedia.name,
+          targetPath: fullPath,
+        });
 
         await toast.promise(uploadPromise, {
           loading: `Uploading ${file.name}`,
-          success: (savedEntry) => {
+          success: (savedEntry: FileSaveData) => {
             onUpload?.(savedEntry);
             return `Uploaded ${file.name}`;
           },

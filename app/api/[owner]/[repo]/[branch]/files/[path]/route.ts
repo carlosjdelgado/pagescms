@@ -163,6 +163,9 @@ export async function POST(
         break;
       case "media":
         if (!data.name) throw new Error(`"name" is required for media.`);
+        if (getFileName(normalizedPath) !== ".gitkeep") {
+          throw new Error(`Media uploads must use POST /api/.../media/[name]/[path].`);
+        }
 
         schema = getSchemaByName(config?.object, data.name, "media");
         if (!schema) throw new Error(`Media schema not found for ${data.name}.`);
@@ -170,18 +173,8 @@ export async function POST(
         schemaCommitIdentity = schema?.commit?.identity;
 
         if (!normalizedPath.startsWith(schema.input)) throw new Error(`Invalid path "${params.path}" for media "${data.name}".`);
-        
-        if (getFileName(normalizedPath) === ".gitkeep") {
-          // Folder creation
-          contentBase64 = "";
-        } else {
-          if (
-            schema.extensions?.length > 0 &&
-            !schema.extensions.includes(getFileExtension(normalizedPath))
-          ) throw new Error(`Invalid extension "${getFileExtension(normalizedPath)}" for media.`);
 
-          contentBase64 = data.content;
-        }
+        contentBase64 = "";
         break;
       case "settings":
         assertGithubIdentity(user, "Only GitHub users can manage settings.");
