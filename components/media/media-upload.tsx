@@ -85,6 +85,7 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
 
           const uploadId = crypto.randomUUID();
           const totalChunks = Math.ceil(file.size / CHUNK_BYTES);
+          const baseUrl = `/api/${config.owner}/${config.repo}/${encodeURIComponent(config.branch)}/files/${encodeURIComponent(fullPath)}`;
           // chunk 0 is always CHUNK_BYTES (or the whole file if N=1); riding it inline maximizes savings on non-multiple sizes
 
           const uploadChunk = async (idx: number) => {
@@ -95,7 +96,7 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
             form.set("uploadId", uploadId);
             form.set("idx", String(idx));
             form.set("chunk", blob);
-            const chunkResponse = await fetch("/api/upload/chunk", { method: "POST", body: form });
+            const chunkResponse = await fetch(`${baseUrl}/chunk`, { method: "POST", body: form });
             await requireApiSuccess(chunkResponse, `Failed to upload chunk ${idx + 1}/${totalChunks}`);
           };
 
@@ -112,14 +113,10 @@ function MediaUploadRoot({ children, path, onUpload, media, extensions, multiple
           const finalizeForm = new FormData();
           finalizeForm.set("uploadId", uploadId);
           finalizeForm.set("totalChunks", String(totalChunks));
-          finalizeForm.set("owner", config.owner);
-          finalizeForm.set("repo", config.repo);
-          finalizeForm.set("branch", config.branch);
-          finalizeForm.set("path", fullPath);
           finalizeForm.set("name", configMedia.name);
           finalizeForm.set("firstChunk", firstBlob);
 
-          const finalizeResponse = await fetch("/api/upload/finalize", {
+          const finalizeResponse = await fetch(`${baseUrl}/finalize`, {
             method: "POST",
             body: finalizeForm,
           });

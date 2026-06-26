@@ -17,20 +17,21 @@ const MAX_CHUNKS = 4;
 const MAX_INLINE_CHUNK_BYTES = 4 * 1024 * 1024;
 const STALE_CHUNK_AGE_MS = 10 * 60 * 1000;
 
-export async function POST(request: Request) {
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ owner: string, repo: string, branch: string, path: string }> }
+) {
   try {
     const sessionResult = await requireApiUserSession();
     if ("response" in sessionResult) return sessionResult.response;
     const user = sessionResult.user;
 
+    const { owner, repo, branch, path } = await context.params;
+
     const form = await request.formData();
     const uploadId = typeof form.get("uploadId") === "string" ? form.get("uploadId") as string : "";
     const totalChunksRaw = form.get("totalChunks");
     const totalChunks = typeof totalChunksRaw === "string" ? parseInt(totalChunksRaw, 10) : NaN;
-    const owner = typeof form.get("owner") === "string" ? form.get("owner") as string : "";
-    const repo = typeof form.get("repo") === "string" ? form.get("repo") as string : "";
-    const branch = typeof form.get("branch") === "string" ? form.get("branch") as string : "";
-    const path = typeof form.get("path") === "string" ? form.get("path") as string : "";
     const name = typeof form.get("name") === "string" ? form.get("name") as string : "";
     const shaRaw = form.get("sha");
     const sha = typeof shaRaw === "string" && shaRaw.length > 0 ? shaRaw : undefined;
@@ -41,9 +42,7 @@ export async function POST(request: Request) {
     if (!Number.isInteger(totalChunks) || totalChunks < 1 || totalChunks > MAX_CHUNKS) {
       throw createHttpError(`"totalChunks" must be between 1 and ${MAX_CHUNKS}.`, 400);
     }
-    if (!owner || !repo || !branch || !path || !name) {
-      throw createHttpError(`Missing required fields.`, 400);
-    }
+    if (!name) throw createHttpError(`Missing "name".`, 400);
     if (!(firstChunk instanceof Blob) || firstChunk.size === 0) {
       throw createHttpError(`Missing "firstChunk".`, 400);
     }
